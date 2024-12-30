@@ -2,22 +2,25 @@ use std::path::PathBuf;
 
 use yeet_buffer::model::BufferLine;
 
-use crate::{action::Action, event::Message, model::Model};
+use crate::{
+    action::Action,
+    event::Message,
+    model::{register::Register, FileTreeBuffer},
+};
 
-pub fn get_current_selected_path(model: &Model) -> Option<PathBuf> {
-    let buffer = &model.files.current.buffer;
-    if buffer.lines.is_empty() {
+pub fn get_current_selected_path(buffer: &FileTreeBuffer) -> Option<PathBuf> {
+    let current_buffer = &buffer.current.buffer;
+    if current_buffer.lines.is_empty() {
         return None;
     }
 
-    let cursor = &model.files.current_cursor.as_ref()?;
-    let current = &buffer.lines.get(cursor.vertical_index)?;
+    let cursor = &buffer.current_cursor.as_ref()?;
+    let current = &current_buffer.lines.get(cursor.vertical_index)?;
     if current.content.is_empty() {
         return None;
     }
 
-    let target = model
-        .files
+    let target = buffer
         .current
         .path
         .join(current.content.to_stripped_string());
@@ -29,19 +32,19 @@ pub fn get_current_selected_path(model: &Model) -> Option<PathBuf> {
     }
 }
 
-pub fn get_current_selected_bufferline(model: &mut Model) -> Option<&mut BufferLine> {
-    let buffer = &mut model.files.current.buffer;
-    if buffer.lines.is_empty() {
+pub fn get_current_selected_bufferline(buffer: &mut FileTreeBuffer) -> Option<&mut BufferLine> {
+    let current_buffer = &mut buffer.current.buffer;
+    if current_buffer.lines.is_empty() {
         return None;
     }
 
-    let cursor = &model.files.current_cursor.as_ref()?;
-    buffer.lines.get_mut(cursor.vertical_index)
+    let cursor = &buffer.current_cursor.as_ref()?;
+    current_buffer.lines.get_mut(cursor.vertical_index)
 }
 
-pub fn copy_current_selected_path_to_clipboard(model: &mut Model) -> Vec<Action> {
-    if let Some(path) = get_current_selected_path(model) {
-        if let Some(clipboard) = model.register.clipboard.as_mut() {
+pub fn copy_to_clipboard(register: &mut Register, buffer: &FileTreeBuffer) -> Vec<Action> {
+    if let Some(path) = get_current_selected_path(buffer) {
+        if let Some(clipboard) = register.clipboard.as_mut() {
             match clipboard.set_text(path.to_string_lossy()) {
                 Ok(_) => Vec::new(),
                 Err(err) => vec![Action::EmitMessages(vec![Message::Error(err.to_string())])],

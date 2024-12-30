@@ -4,13 +4,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     action::Action,
-    model::{CurrentTask, Model},
+    model::{CurrentTask, Tasks},
 };
 
-pub fn add(model: &mut Model, identifier: String, cancellation: CancellationToken) -> Vec<Action> {
-    let id = next_id(model);
+pub fn add(tasks: &mut Tasks, identifier: String, cancellation: CancellationToken) -> Vec<Action> {
+    let id = next_id(tasks);
 
-    if let Some(replaced_task) = model.current_tasks.insert(
+    if let Some(replaced_task) = tasks.running.insert(
         identifier.clone(),
         CurrentTask {
             token: cancellation,
@@ -23,14 +23,14 @@ pub fn add(model: &mut Model, identifier: String, cancellation: CancellationToke
     Vec::new()
 }
 
-fn next_id(model: &mut Model) -> u16 {
-    let mut next_id = if model.latest_task_id >= 9999 {
+fn next_id(tasks: &mut Tasks) -> u16 {
+    let mut next_id = if tasks.latest_id >= 9999 {
         1
     } else {
-        model.latest_task_id + 1
+        tasks.latest_id + 1
     };
 
-    let mut running_ids: Vec<u16> = model.current_tasks.values().map(|task| task.id).collect();
+    let mut running_ids: Vec<u16> = tasks.running.values().map(|task| task.id).collect();
     running_ids.sort();
 
     for id in running_ids {
@@ -41,13 +41,13 @@ fn next_id(model: &mut Model) -> u16 {
         }
     }
 
-    model.latest_task_id = next_id;
+    tasks.latest_id = next_id;
 
     next_id
 }
 
-pub fn remove(model: &mut Model, identifier: String) -> Vec<Action> {
-    if let Some(task) = model.current_tasks.remove(&identifier) {
+pub fn remove(tasks: &mut Tasks, identifier: String) -> Vec<Action> {
+    if let Some(task) = tasks.running.remove(&identifier) {
         task.token.cancel();
     }
     Vec::new()

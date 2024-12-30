@@ -5,15 +5,25 @@ use ratatui::{
     widgets::{Block, Paragraph},
     Frame,
 };
-use yeet_buffer::model::undo::{self, BufferChanged};
+use yeet_buffer::model::{
+    undo::{self, BufferChanged},
+    Cursor,
+};
 
-use crate::model::Model;
+use crate::model::{Buffer, FileTreeBuffer};
 
-pub fn view(model: &Model, frame: &mut Frame, rect: Rect) {
-    let changes = get_changes_content(model);
-    let position = get_position_content(model);
+pub fn view(cursor: &Cursor, current: &Buffer, frame: &mut Frame, rect: Rect) {
+    match current {
+        Buffer::FileTree(it) => filetree_status(cursor, it, frame, rect),
+        Buffer::_Text(_) => todo!(),
+    }
+}
 
-    let content = model.files.current.path.to_str().unwrap_or("");
+fn filetree_status(cursor: &Cursor, buffer: &FileTreeBuffer, frame: &mut Frame, rect: Rect) {
+    let changes = get_changes_content(buffer);
+    let position = get_position_content(cursor, buffer);
+
+    let content = buffer.current.path.to_str().unwrap_or("");
     let style = Style::default().fg(Color::Gray);
     let span = Span::styled(content, style);
     let path = Line::from(span);
@@ -28,35 +38,28 @@ pub fn view(model: &Model, frame: &mut Frame, rect: Rect) {
         ])
         .split(rect);
 
+    frame.render_widget(Paragraph::new(path), layout[0]);
     frame.render_widget(
         Block::default().style(Style::default().bg(Color::Black)),
-        rect,
+        layout[1],
     );
-
-    frame.render_widget(Paragraph::new(path), layout[0]);
     frame.render_widget(Paragraph::new(changes), layout[2]);
     frame.render_widget(Paragraph::new(position), layout[3]);
 }
 
-fn get_position_content(model: &Model) -> Line {
-    let count = model.files.current.buffer.lines.len();
-    let current_position = model
-        .files
-        .current_cursor
-        .as_ref()
-        .map(|crsr| crsr.vertical_index + 1);
+fn get_position_content<'a>(cursor: &Cursor, buffer: &'a FileTreeBuffer) -> Line<'a> {
+    let count = buffer.current.buffer.lines.len();
+    let mut position = cursor.vertical_index + 1;
 
     let mut content = Vec::new();
-    if let Some(mut position) = current_position {
-        if count == 0 {
-            position = 0;
-        }
-
-        content.push(Span::styled(
-            format!("{}/", position),
-            Style::default().fg(Color::Gray),
-        ));
+    if count == 0 {
+        position = 0;
     }
+
+    content.push(Span::styled(
+        format!("{}/", position),
+        Style::default().fg(Color::Gray),
+    ));
 
     content.push(Span::styled(
         format!("{}", count),
@@ -66,8 +69,8 @@ fn get_position_content(model: &Model) -> Line {
     Line::from(content)
 }
 
-fn get_changes_content(model: &Model) -> Line {
-    let modifications = model.files.current.buffer.undo.get_uncommited_changes();
+fn get_changes_content(buffer: &FileTreeBuffer) -> Line {
+    let modifications = buffer.current.buffer.undo.get_uncommited_changes();
     let changes = undo::consolidate_modifications(&modifications);
 
     let (mut added, mut changed, mut removed) = (0, 0, 0);

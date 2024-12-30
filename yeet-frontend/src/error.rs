@@ -30,6 +30,8 @@ pub enum AppError {
     ImageOperationFailed(#[from] image::ImageError),
     #[error("Terminal not initialized")]
     TerminalNotInitialized,
+    #[error("Rendering view failed")]
+    ViewModelFailed(#[from] std::num::TryFromIntError),
     #[error("Watch operation on path failed")]
     WatchOperationFailed(#[from] notify::Error),
 }

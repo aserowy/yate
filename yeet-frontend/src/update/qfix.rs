@@ -2,38 +2,54 @@ use std::path::PathBuf;
 
 use crate::{
     action::Action,
-    model::{qfix::QFIX_SIGN_ID, Model},
+    model::{
+        qfix::{QuickFix, QFIX_SIGN_ID},
+        App, Buffer,
+    },
 };
 
-use super::{
-    selection::{get_current_selected_bufferline, get_current_selected_path},
-    sign,
-};
+use super::{app, selection, sign};
 
-pub fn toggle_selected_to_qfix(model: &mut Model) -> Vec<Action> {
-    let selected = get_current_selected_path(model);
+pub fn toggle(app: &mut App, qfix: &mut QuickFix) -> Vec<Action> {
+    let buffer = match app::get_focused_mut(app) {
+        Buffer::FileTree(it) => it,
+        Buffer::_Text(_) => return Vec::new(),
+    };
+
+    let selected = selection::get_current_selected_path(buffer);
     if let Some(selected) = selected {
-        if model.qfix.entries.contains(&selected) {
-            model.qfix.entries.retain(|p| p != &selected);
-            if let Some(bl) = get_current_selected_bufferline(model) {
-                sign::unset(bl, QFIX_SIGN_ID);
-            }
+        if qfix.entries.contains(&selected) {
+            qfix.entries.retain(|p| p != &selected);
+
+            sign::unset_sign_for_paths(
+                app.buffers.values_mut().collect(),
+                vec![selected.clone()],
+                QFIX_SIGN_ID,
+            );
         } else {
-            model.qfix.entries.push(selected);
-            if let Some(bl) = get_current_selected_bufferline(model) {
-                sign::set(bl, QFIX_SIGN_ID);
-            }
+            qfix.entries.push(selected.clone());
+
+            sign::set_sign_for_paths(
+                app.buffers.values_mut().collect(),
+                vec![selected],
+                QFIX_SIGN_ID,
+            );
         }
     }
+
     Vec::new()
 }
 
-pub fn add(model: &mut Model, paths: Vec<PathBuf>) -> Vec<Action> {
+pub fn add(qfix: &mut QuickFix, buffers: Vec<&mut Buffer>, paths: Vec<PathBuf>) -> Vec<Action> {
+    let mut added_paths = Vec::new();
     for path in paths {
-        if !model.qfix.entries.contains(&path) {
-            sign::set_sign_for_path(model, path.as_path(), QFIX_SIGN_ID);
-            model.qfix.entries.push(path);
+        if !qfix.entries.contains(&path) {
+            added_paths.push(path.clone());
+            qfix.entries.push(path);
         };
     }
+
+    sign::set_sign_for_paths(buffers, added_paths, QFIX_SIGN_ID);
+
     Vec::new()
 }

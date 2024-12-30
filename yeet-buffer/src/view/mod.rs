@@ -7,26 +7,32 @@ use ratatui::{
     Frame,
 };
 
-use crate::model::{ansi::Ansi, viewport::ViewPort, Buffer, BufferLine, Cursor, Mode};
+use crate::model::{ansi::Ansi, viewport::ViewPort, BufferLine, Cursor, Mode, TextBuffer};
 
 mod line;
 mod prefix;
 mod style;
 
-// FIX: long lines break viewport content
 pub fn view(
     viewport: &ViewPort,
-    cursor: &Option<Cursor>,
+    cursor: Option<&Cursor>,
     mode: &Mode,
-    buffer: &Buffer,
-    show_border: &bool,
+    buffer: &TextBuffer,
     frame: &mut Frame,
-    rect: Rect,
+    horizontal_offset: u16,
+    vertical_offset: u16,
 ) {
     let rendered = get_rendered_lines(viewport, buffer);
     let styled = get_styled_lines(viewport, mode, cursor, rendered);
 
-    let rect = if *show_border {
+    let rect = Rect {
+        x: horizontal_offset,
+        y: vertical_offset,
+        width: viewport.width,
+        height: viewport.height,
+    };
+
+    let rect = if viewport.show_border {
         let block = Block::default()
             .borders(Borders::RIGHT)
             .border_style(Style::default().fg(Color::Black));
@@ -43,12 +49,12 @@ pub fn view(
     frame.render_widget(Paragraph::new(styled), rect);
 }
 
-fn get_rendered_lines(viewport: &ViewPort, buffer: &Buffer) -> Vec<BufferLine> {
+fn get_rendered_lines(viewport: &ViewPort, buffer: &TextBuffer) -> Vec<BufferLine> {
     buffer
         .lines
         .iter()
         .skip(viewport.vertical_index)
-        .take(viewport.height)
+        .take(usize::from(viewport.height))
         .map(|line| line.to_owned())
         .collect()
 }
@@ -56,7 +62,7 @@ fn get_rendered_lines(viewport: &ViewPort, buffer: &Buffer) -> Vec<BufferLine> {
 fn get_styled_lines<'a>(
     vp: &ViewPort,
     mode: &Mode,
-    cursor: &Option<Cursor>,
+    cursor: Option<&Cursor>,
     lines: Vec<BufferLine>,
 ) -> Vec<Line<'a>> {
     let lines = if lines.is_empty() {

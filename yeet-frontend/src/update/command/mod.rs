@@ -4,17 +4,19 @@ use yeet_keymap::message::{KeymapMessage, QuitMode};
 use crate::{
     action::{self, Action},
     event::Message,
-    model::Model,
+    model::{App, Buffer, State},
     task::Task,
 };
+
+use super::app;
 
 mod file;
 mod print;
 mod qfix;
 mod task;
 
-#[tracing::instrument(skip(model))]
-pub fn execute(cmd: &str, model: &mut Model) -> Vec<Action> {
+#[tracing::instrument(skip_all)]
+pub fn execute(app: &mut App, state: &mut State, cmd: &str) -> Vec<Action> {
     let cmd_with_args = match cmd.split_once(' ') {
         Some(it) => it,
         None => (cmd, ""),
@@ -22,20 +24,46 @@ pub fn execute(cmd: &str, model: &mut Model) -> Vec<Action> {
 
     tracing::debug!("executing command: {:?}", cmd_with_args);
 
-    let mode_before = model.mode.clone();
-    let mode = get_mode_after_command(&model.mode_before);
+    let mode_before = state.modes.current.clone();
+    let mode = get_mode_after_command(&state.modes.previous);
 
     // NOTE: all file commands like e.g. d! should use preview path as target to enable cdo
     match cmd_with_args {
-        ("cdo", command) => add_change_mode(mode_before, mode, qfix::cdo(model, command)),
-        ("cfirst", "") => add_change_mode(mode_before, mode, qfix::select_first(model)),
-        ("cl", "") => print::qfix(&model.qfix),
-        ("clearcl", "") => add_change_mode(mode_before, mode, qfix::reset(model)),
-        ("clearcl", path) => add_change_mode(mode_before, mode, qfix::clear_in(model, path)),
-        ("cn", "") => add_change_mode(mode_before, mode, qfix::next(model)),
-        ("cN", "") => add_change_mode(mode_before, mode, qfix::previous(model)),
-        ("cp", target) => add_change_mode(mode_before, mode, file::copy(model, target)),
-        ("d!", "") => add_change_mode(mode_before, mode, file::delete_selection(model)),
+        ("cdo", command) => add_change_mode(mode_before, mode, qfix::cdo(&mut state.qfix, command)),
+        ("cfirst", "") => add_change_mode(mode_before, mode, qfix::select_first(&mut state.qfix)),
+        ("cl", "") => print::qfix(&state.qfix),
+        ("clearcl", "") => add_change_mode(
+            mode_before,
+            mode,
+            qfix::reset(&mut state.qfix, app.buffers.values_mut().collect()),
+        ),
+        ("clearcl", path) => add_change_mode(
+            mode_before,
+            mode,
+            qfix::clear_in(app, &mut state.qfix, path),
+        ),
+        ("cn", "") => add_change_mode(mode_before, mode, qfix::next(&mut state.qfix)),
+        ("cN", "") => add_change_mode(mode_before, mode, qfix::previous(&mut state.qfix)),
+        ("cp", target) => {
+            let buffer = match app::get_focused_mut(app) {
+                Buffer::FileTree(it) => it,
+                Buffer::_Text(_) => todo!(),
+            };
+
+            add_change_mode(
+                mode_before,
+                mode,
+                file::copy_selection(&state.marks, &buffer.preview, target),
+            )
+        }
+        ("d!", "") => {
+            let buffer = match app::get_focused_mut(app) {
+                Buffer::FileTree(it) => it,
+                Buffer::_Text(_) => todo!(),
+            };
+
+            add_change_mode(mode_before, mode, file::delete_selection(&buffer.preview))
+        }
         ("delm", args) if !args.is_empty() => {
             let mut marks = Vec::new();
             for mark in args.chars().filter(|c| c != &' ') {
@@ -50,7 +78,7 @@ pub fn execute(cmd: &str, model: &mut Model) -> Vec<Action> {
         }
         ("delt", args) if !args.is_empty() => {
             let actions = match args.parse::<u16>() {
-                Ok(it) => task::delete(model, it),
+                Ok(it) => task::delete(&mut state.tasks, it),
                 Err(err) => {
                     tracing::warn!("Failed to parse id: {}", err);
                     return Vec::new();
@@ -59,19 +87,48 @@ pub fn execute(cmd: &str, model: &mut Model) -> Vec<Action> {
 
             add_change_mode(mode_before, mode, actions)
         }
-        ("e!", "") => add_change_mode(mode_before, mode, file::refresh(model)),
-        ("fd", params) => add_change_mode(
+        ("e!", "") => {
+            let buffer = match app::get_focused_mut(app) {
+                Buffer::FileTree(it) => it,
+                Buffer::_Text(_) => todo!(),
+            };
+
+            add_change_mode(mode_before, mode, file::refresh(buffer))
+        }
+        ("fd", params) => {
+            let buffer = match app::get_focused_mut(app) {
+                Buffer::FileTree(it) => it,
+                Buffer::_Text(_) => todo!(),
+            };
+
+            add_change_mode(
+                mode_before,
+                mode,
+                vec![Action::Task(Task::ExecuteFd(
+                    buffer.current.path.clone(),
+                    params.to_owned(),
+                ))],
+            )
+        }
+        ("invertcl", "") => add_change_mode(
             mode_before,
             mode,
-            vec![Action::Task(Task::ExecuteFd(
-                model.files.current.path.clone(),
-                params.to_owned(),
-            ))],
+            qfix::invert_in_current(app, &mut state.qfix),
         ),
-        ("invertcl", "") => add_change_mode(mode_before, mode, qfix::invert_in_current(model)),
-        ("junk", "") => print::junkyard(&model.junk),
-        ("marks", "") => print::marks(&model.marks),
-        ("mv", target) => add_change_mode(mode_before, mode, file::rename_selection(model, target)),
+        ("junk", "") => print::junkyard(&state.junk),
+        ("marks", "") => print::marks(&state.marks),
+        ("mv", target) => {
+            let buffer = match app::get_focused_mut(app) {
+                Buffer::FileTree(it) => it,
+                Buffer::_Text(_) => todo!(),
+            };
+
+            add_change_mode(
+                mode_before,
+                mode,
+                file::rename_selection(&state.marks, &buffer.preview, target),
+            )
+        }
         ("noh", "") => add_change_mode(
             mode_before,
             mode,
@@ -83,8 +140,8 @@ pub fn execute(cmd: &str, model: &mut Model) -> Vec<Action> {
             QuitMode::FailOnRunningTasks,
         ))],
         ("q!", "") => vec![action::emit_keymap(KeymapMessage::Quit(QuitMode::Force))],
-        ("reg", "") => print::register(&model.register),
-        ("tl", "") => print::tasks(&model.current_tasks),
+        ("reg", "") => print::register(&state.register),
+        ("tl", "") => print::tasks(&state.tasks),
         ("w", "") => add_change_mode(
             mode_before,
             mode,

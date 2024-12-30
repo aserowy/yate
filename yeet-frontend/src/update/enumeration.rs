@@ -3,13 +3,12 @@ use std::{mem, path::PathBuf};
 use yeet_buffer::{
     message::{BufferMessage, ViewPortDirection},
     model::{ansi::Ansi, BufferLine, Cursor, CursorPosition, Mode},
-    update::update_buffer,
 };
 
 use crate::{
     action::Action,
     event::ContentKind,
-    model::{DirectoryBufferState, Model, WindowType},
+    model::{Buffer, DirectoryBufferState, FileTreeBuffer, FileTreeBufferSection, State},
     update::{
         cursor::{set_cursor_index_to_selection, set_cursor_index_with_history},
         history::get_selection_from_history,
@@ -18,15 +17,34 @@ use crate::{
     },
 };
 
-#[tracing::instrument(skip(model, contents))]
-pub fn update_on_enumeration_change(
-    model: &mut Model,
+#[tracing::instrument(skip(state, buffers, contents))]
+pub fn change(
+    state: &mut State,
+    buffers: Vec<&mut Buffer>,
     path: &PathBuf,
     contents: &[(ContentKind, String)],
     selection: &Option<String>,
 ) -> Vec<Action> {
-    // TODO: handle unsaved changes
-    let directories = model.files.get_mut_directories();
+    for buffer in buffers {
+        let buffer = match buffer {
+            Buffer::FileTree(it) => it,
+            _ => continue,
+        };
+
+        change_filetree(state, buffer, path, contents, selection);
+    }
+
+    Vec::new()
+}
+
+fn change_filetree(
+    state: &mut State,
+    buffer: &mut FileTreeBuffer,
+    path: &PathBuf,
+    contents: &[(ContentKind, String)],
+    selection: &Option<String>,
+) {
+    let directories = buffer.get_mut_directories();
     if let Some((path, viewport, cursor, buffer)) =
         directories.into_iter().find(|(p, _, _, _)| p == path)
     {
@@ -37,133 +55,149 @@ pub fn update_on_enumeration_change(
             .iter()
             .map(|(knd, cntnt)| {
                 let mut line = from_enumeration(cntnt, knd);
-                set_sign_if_marked(&model.marks, &mut line, &path.join(cntnt));
-                set_sign_if_qfix(&model.qfix, &mut line, &path.join(cntnt));
+                set_sign_if_marked(&state.marks, &mut line, &path.join(cntnt));
+                set_sign_if_qfix(&state.qfix, &mut line, &path.join(cntnt));
 
                 line
             })
             .collect();
 
-        update_buffer(
+        yeet_buffer::update(
             viewport,
             cursor,
-            &model.mode,
+            &state.modes.current,
             buffer,
-            &BufferMessage::SetContent(content),
+            vec![&BufferMessage::SetContent(content)],
         );
 
         if is_first_changed_event {
             if let Some(selection) = selection {
-                if set_cursor_index_to_selection(viewport, cursor, &model.mode, buffer, selection) {
+                if set_cursor_index_to_selection(
+                    viewport,
+                    cursor,
+                    &state.modes.current,
+                    buffer,
+                    selection,
+                ) {
                     tracing::trace!("setting cursor index from selection: {:?}", selection);
                 }
             }
         }
     }
 
-    if path == &model.files.current.path {
-        model.files.current.state = DirectoryBufferState::PartiallyLoaded;
+    if path == &buffer.current.path {
+        buffer.current.state = DirectoryBufferState::PartiallyLoaded;
     }
 
     tracing::trace!(
         "changed enumeration for path {:?} with current directory states: current is {:?}",
         path,
-        model.files.current.state,
+        buffer.current.state,
     );
-
-    Vec::new()
 }
 
-#[tracing::instrument(skip(model))]
-pub fn update_on_enumeration_finished(
-    model: &mut Model,
+#[tracing::instrument(skip(state, buffers, contents))]
+pub fn finish(
+    state: &mut State,
+    buffers: Vec<&mut Buffer>,
     path: &PathBuf,
     contents: &[(ContentKind, String)],
     selection: &Option<String>,
 ) -> Vec<Action> {
-    update_on_enumeration_change(model, path, contents, selection);
-
-    if model.mode != Mode::Navigation {
+    if state.modes.current != Mode::Navigation {
         return Vec::new();
     }
 
-    let directories = model.files.get_mut_directories();
-    if let Some((_, viewport, cursor, buffer)) =
-        directories.into_iter().find(|(p, _, _, _)| p == path)
-    {
-        update_buffer(
-            viewport,
-            cursor,
-            &model.mode,
-            buffer,
-            &BufferMessage::SortContent(super::SORT),
-        );
+    let mut actions = Vec::new();
+    for buffer in buffers {
+        let buffer = match buffer {
+            Buffer::FileTree(it) => it,
+            _ => continue,
+        };
 
-        if let Some(selection) = selection {
-            let mut cursor_after_finished = match cursor {
-                Some(it) => Some(it.clone()),
-                None => Some(Cursor {
-                    horizontal_index: CursorPosition::None,
-                    vertical_index: 0,
-                    ..Default::default()
-                }),
-            };
+        change_filetree(state, buffer, path, contents, selection);
 
-            if !set_cursor_index_to_selection(
+        let directories = buffer.get_mut_directories();
+        if let Some((_, viewport, cursor, buffer)) =
+            directories.into_iter().find(|(p, _, _, _)| p == path)
+        {
+            yeet_buffer::update(
                 viewport,
-                &mut cursor_after_finished,
-                &model.mode,
+                cursor,
+                &state.modes.current,
                 buffer,
-                selection,
-            ) {
-                set_cursor_index_with_history(
+                vec![&BufferMessage::SortContent(super::SORT)],
+            );
+
+            if let Some(selection) = selection {
+                let mut cursor_after_finished = match cursor {
+                    Some(it) => Some(it.clone()),
+                    None => Some(Cursor {
+                        horizontal_index: CursorPosition::None,
+                        vertical_index: 0,
+                        ..Default::default()
+                    }),
+                };
+
+                if !set_cursor_index_to_selection(
                     viewport,
                     &mut cursor_after_finished,
-                    &model.mode,
-                    &model.history,
+                    &state.modes.current,
                     buffer,
-                    path,
-                );
+                    selection,
+                ) {
+                    set_cursor_index_with_history(
+                        &state.history,
+                        viewport,
+                        &mut cursor_after_finished,
+                        &state.modes.current,
+                        buffer,
+                        path,
+                    );
+                }
+
+                let _ = mem::replace(cursor, cursor_after_finished);
             }
 
-            let _ = mem::replace(cursor, cursor_after_finished);
+            yeet_buffer::update(
+                viewport,
+                cursor,
+                &state.modes.current,
+                buffer,
+                vec![&BufferMessage::MoveViewPort(ViewPortDirection::CenterOnCursor)],
+            );
         }
 
-        update_buffer(
-            viewport,
-            cursor,
-            &model.mode,
-            buffer,
-            &BufferMessage::MoveViewPort(ViewPortDirection::CenterOnCursor),
+        if path == &buffer.current.path {
+            buffer.current.state = DirectoryBufferState::Ready;
+        }
+
+        tracing::trace!(
+            "finished enumeration for path {:?} with current directory states: current is {:?}",
+            path,
+            buffer.current.state,
         );
+
+        if buffer.current.state == DirectoryBufferState::Loading {
+            continue;
+        }
+
+        let selected_path = match selection::get_current_selected_path(buffer) {
+            Some(path) => path,
+            None => continue,
+        };
+
+        if Some(selected_path.as_path()) == buffer.preview.resolve_path() {
+            continue;
+        }
+
+        let selection = get_selection_from_history(&state.history, path).map(|s| s.to_owned());
+        actions.push(Action::Load(
+            FileTreeBufferSection::Preview,
+            selected_path,
+            selection,
+        ));
     }
-
-    if path == &model.files.current.path {
-        model.files.current.state = DirectoryBufferState::Ready;
-    }
-
-    tracing::trace!(
-        "finished enumeration for path {:?} with current directory states: current is {:?}",
-        path,
-        model.files.current.state,
-    );
-
-    let mut actions = Vec::new();
-    if model.files.current.state == DirectoryBufferState::Loading {
-        return actions;
-    }
-
-    let selected_path = match selection::get_current_selected_path(model) {
-        Some(path) => path,
-        None => return actions,
-    };
-
-    if Some(selected_path.as_path()) == model.files.preview.resolve_path() {
-        return actions;
-    }
-
-    let selection = get_selection_from_history(&model.history, path).map(|s| s.to_owned());
-    actions.push(Action::Load(WindowType::Preview, selected_path, selection));
 
     actions
 }

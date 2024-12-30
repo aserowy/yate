@@ -52,13 +52,13 @@ pub enum SearchDirection {
 }
 
 #[derive(Default)]
-pub struct Buffer {
+pub struct TextBuffer {
     pub last_find: Option<CursorDirection>,
     pub lines: Vec<BufferLine>,
     pub undo: Undo,
 }
 
-impl std::fmt::Debug for Buffer {
+impl std::fmt::Debug for TextBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Buffer")
             .field("last_find", &self.last_find)

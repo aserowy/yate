@@ -11,17 +11,17 @@ use crate::{
     error::AppError,
     event::{Emitter, Message},
     init::{history, mark, qfix},
-    model::{DirectoryBufferState, Model, WindowType},
+    model::{Buffer, DirectoryBufferState, FileTreeBufferSection, Model},
     open,
     task::Task,
     terminal::TerminalWrapper,
-    update::{self, viewport},
+    update::{self, app},
 };
 
 #[derive(Debug)]
 pub enum Action {
     EmitMessages(Vec<Message>),
-    Load(WindowType, PathBuf, Option<String>),
+    Load(FileTreeBufferSection, PathBuf, Option<String>),
     ModeChanged,
     Open(PathBuf),
     Quit(QuitMode, Option<String>),
@@ -100,6 +100,11 @@ async fn execute(
         ActionResult::Normal
     };
 
+    let buffer = match app::get_focused_mut(&mut model.app) {
+        Buffer::FileTree(it) => it,
+        Buffer::_Text(_) => todo!(),
+    };
+
     let mut remaining_actions = vec![];
     for action in actions.into_iter() {
         if is_preview != is_preview_action(&action) {
@@ -115,46 +120,51 @@ async fn execute(
             }
             Action::Load(window_type, path, selection) => {
                 match window_type {
-                    WindowType::Current => {
-                        model.files.current.state = DirectoryBufferState::Loading;
-                        model.files.current.path = path.clone();
+                    FileTreeBufferSection::Current => {
+                        buffer.current.state = DirectoryBufferState::Loading;
+                        buffer.current.path = path.clone();
 
-                        yeet_buffer::update::update_buffer(
-                            &mut model.files.current_vp,
-                            &mut model.files.current_cursor,
-                            &model.mode,
-                            &mut model.files.current.buffer,
+                        yeet_buffer::update(
+                            &mut buffer.current_vp,
+                            &mut buffer.current_cursor,
+                            &model.state.modes.current,
+                            &mut buffer.current.buffer,
                             &BufferMessage::SetContent(Vec::new()),
                         );
 
-                        viewport::set_viewport_dimensions(
-                            &mut model.files.current_vp,
-                            &model.layout.current,
-                        );
-
-                        yeet_buffer::update::update_buffer(
-                            &mut model.files.current_vp,
-                            &mut model.files.current_cursor,
-                            &model.mode,
-                            &mut model.files.current.buffer,
+                        yeet_buffer::update(
+                            &mut buffer.current_vp,
+                            &mut buffer.current_cursor,
+                            &model.state.modes.current,
+                            &mut buffer.current.buffer,
                             &BufferMessage::ResetCursor,
                         );
 
                         emitter.run(Task::EnumerateDirectory(path, selection.clone()));
                     }
-                    WindowType::Parent | WindowType::Preview => {
-                        update::buffer_type(&window_type, model, path.as_path(), vec![]);
+                    FileTreeBufferSection::Parent | FileTreeBufferSection::Preview => {
+                        update::buffer_type(
+                            &model.state.history,
+                            &model.state.modes.current,
+                            buffer,
+                            &window_type,
+                            path.as_path(),
+                            vec![],
+                        );
 
                         if path.is_dir() {
                             emitter.run(Task::EnumerateDirectory(path.clone(), selection.clone()));
                         } else {
-                            emitter.run(Task::LoadPreview(path.clone(), model.layout.preview));
+                            // TODO: add rect to load preview after layout concept is implemented
+                            // emitter.run(Task::LoadPreview(path.clone(), model.app.layout.preview));
                         }
                     }
                 };
             }
             Action::ModeChanged => {
-                emitter.set_current_mode(model.mode.clone()).await;
+                emitter
+                    .set_current_mode(model.state.modes.current.clone())
+                    .await;
             }
             Action::Open(path) => {
                 // TODO: check with mime if suspend/resume is necessary?
@@ -182,14 +192,14 @@ async fn execute(
 
                 match mode {
                     QuitMode::FailOnRunningTasks => {
-                        if let Err(error) = history::save_history_to_file(&model.history) {
+                        if let Err(error) = history::save_history_to_file(&model.state.history) {
                             tracing::error!("Failed to save history to file: {:?}", error);
                         }
                         history::optimize_history_file()?;
-                        if let Err(error) = mark::save_marks_to_file(&model.marks) {
+                        if let Err(error) = mark::save_marks_to_file(&model.state.marks) {
                             tracing::error!("Failed to save marks to file: {:?}", error);
                         }
-                        if let Err(error) = qfix::save_qfix_to_files(&model.qfix) {
+                        if let Err(error) = qfix::save_qfix_to_files(&model.state.qfix) {
                             tracing::error!("Failed to save quick fix to file: {:?}", error);
                         }
                     }
@@ -199,8 +209,12 @@ async fn execute(
             Action::Resize(x, y) => {
                 terminal.resize(x, y)?;
 
-                if let Some(path) = &model.files.preview.resolve_path() {
-                    emitter.run(Task::LoadPreview(path.to_path_buf(), model.layout.preview));
+                if let Some(_path) = &buffer.preview.resolve_path() {
+                    // TODO: add rect to load preview after layout concept is implemented
+                    // emitter.run(Task::LoadPreview(
+                    //     path.to_path_buf(),
+                    //     model.app.layout.preview,
+                    // ));
                 }
             }
             Action::Task(task) => emitter.run(task),
@@ -210,7 +224,9 @@ async fn execute(
                 }
 
                 if let Some(cancellation) = model
-                    .current_tasks
+                    .state
+                    .tasks
+                    .running
                     .get(&Task::EnumerateDirectory(path.clone(), None).to_string())
                 {
                     cancellation.token.cancel();

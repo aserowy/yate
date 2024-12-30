@@ -1,10 +1,14 @@
 use std::mem;
 
-use crate::model::{Buffer, BufferLine, Cursor, CursorPosition};
+use crate::model::{BufferLine, Cursor, CursorPosition, TextBuffer};
 
 use super::cursor;
 
-pub fn move_cursor_to_word_start_forward(cursor: &mut Cursor, buffer: &mut Buffer, is_upper: bool) {
+pub fn move_cursor_to_word_start_forward(
+    cursor: &mut Cursor,
+    buffer: &mut TextBuffer,
+    is_upper: bool,
+) {
     let current = match buffer.lines.get(cursor.vertical_index) {
         Some(line) => line,
         None => return,
@@ -54,7 +58,11 @@ pub fn move_cursor_to_word_start_forward(cursor: &mut Cursor, buffer: &mut Buffe
     }
 }
 
-pub fn move_cursor_to_word_end_backward(cursor: &mut Cursor, buffer: &mut Buffer, is_upper: bool) {
+pub fn move_cursor_to_word_end_backward(
+    cursor: &mut Cursor,
+    buffer: &mut TextBuffer,
+    is_upper: bool,
+) {
     let current = match buffer.lines.get(cursor.vertical_index) {
         Some(line) => line,
         None => return,
@@ -107,7 +115,11 @@ pub fn move_cursor_to_word_end_backward(cursor: &mut Cursor, buffer: &mut Buffer
     }
 }
 
-pub fn move_cursor_to_word_end_forward(cursor: &mut Cursor, buffer: &mut Buffer, is_upper: bool) {
+pub fn move_cursor_to_word_end_forward(
+    cursor: &mut Cursor,
+    buffer: &mut TextBuffer,
+    is_upper: bool,
+) {
     let current = match buffer.lines.get(cursor.vertical_index) {
         Some(line) => line,
         None => return,
@@ -167,7 +179,7 @@ pub fn move_cursor_to_word_end_forward(cursor: &mut Cursor, buffer: &mut Buffer,
 
 pub fn move_cursor_to_word_start_backward(
     cursor: &mut Cursor,
-    buffer: &mut Buffer,
+    buffer: &mut TextBuffer,
     is_upper: bool,
 ) {
     let current = match buffer.lines.get(cursor.vertical_index) {
@@ -365,11 +377,11 @@ fn get_cursor_on_word_previous_line(cursor: &Cursor, lines: &[BufferLine]) -> Re
 
 #[cfg(test)]
 mod test {
-    use crate::model::{Buffer, BufferLine, Cursor, CursorPosition};
+    use crate::model::{BufferLine, Cursor, CursorPosition, TextBuffer};
 
     #[test]
     fn move_cursor_to_word_end_backward_starting_on_line_start() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello worldz"),
             BufferLine::from("hello world"),
@@ -393,7 +405,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_backward_starting_on_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello worldz"),
             BufferLine::from("hello world"),
@@ -417,7 +429,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_starting_on_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -441,7 +453,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_starting_on_word_middle() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -465,7 +477,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_starting_on_last_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -489,7 +501,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_starting_on_last_word_with_whitespace() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world  "),
             BufferLine::from("hello world"),
@@ -513,7 +525,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_changing_alphanumeric() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello!@#$!@#$"),
             BufferLine::from("hello world"),
@@ -537,7 +549,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_starting_on_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -561,7 +573,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_starting_on_whitespace() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("    hello world"),
             BufferLine::from("hello world"),
@@ -585,7 +597,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_starting_on_wordend() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world "),
             BufferLine::from("hello world"),
@@ -609,7 +621,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_starting_on_wordend_at_lineend() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -633,7 +645,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_starting_on_wordend_at_lineend_with_whitespaces() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world   "),
             BufferLine::from("hello world"),
@@ -657,7 +669,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_jump_to_wordend_on_lineend() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("!@#- world"),
             BufferLine::from("hello world"),
@@ -681,7 +693,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_two_words_without_whitespace() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hell#-world"),
             BufferLine::from("hello world"),
@@ -705,7 +717,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_end_within_upper_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hell#-world"),
             BufferLine::from("hello world"),
@@ -729,7 +741,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_backward_starting_on_line_start() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello worldz"),
             BufferLine::from("hello world"),
@@ -753,7 +765,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_backward_starting_on_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello worldz"),
             BufferLine::from("hello world"),
@@ -777,7 +789,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_backward_starting_on_whitespace() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("    hello world"),
@@ -801,7 +813,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_backward_starting_on_word_middle() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),
@@ -825,7 +837,7 @@ mod test {
 
     #[test]
     fn move_cursor_to_word_start_backward_starting_on_last_word() {
-        let mut buffer = Buffer::default();
+        let mut buffer = TextBuffer::default();
         buffer.lines = vec![
             BufferLine::from("hello world"),
             BufferLine::from("hello world"),

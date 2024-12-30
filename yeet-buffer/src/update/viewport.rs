@@ -1,17 +1,23 @@
 use crate::{
     message::ViewPortDirection,
-    model::{viewport::ViewPort, Buffer, Cursor, CursorPosition},
+    model::{viewport::ViewPort, Cursor, CursorPosition, TextBuffer},
 };
 
-pub fn update_by_cursor(viewport: &mut ViewPort, cursor: &Cursor, buffer: &Buffer) {
+pub fn update_by_cursor(viewport: &mut ViewPort, cursor: &Cursor, buffer: &TextBuffer) {
     if buffer.lines.is_empty() {
         return;
     }
 
+    let viewport_offset = if viewport.height == 0 {
+        0
+    } else {
+        usize::from(viewport.height - 1)
+    };
+
     if viewport.vertical_index > cursor.vertical_index {
         viewport.vertical_index = cursor.vertical_index;
-    } else if viewport.vertical_index + (viewport.height - 1) < cursor.vertical_index {
-        viewport.vertical_index = cursor.vertical_index - (viewport.height - 1);
+    } else if viewport.vertical_index + viewport_offset < cursor.vertical_index {
+        viewport.vertical_index = cursor.vertical_index - viewport_offset;
     }
 
     let cursor_index = match cursor.horizontal_index {
@@ -41,7 +47,7 @@ pub fn update_by_cursor(viewport: &mut ViewPort, cursor: &Cursor, buffer: &Buffe
 pub fn update_by_direction(
     viewport: &mut ViewPort,
     cursor: &mut Option<Cursor>,
-    buffer: &mut Buffer,
+    buffer: &TextBuffer,
     direction: &ViewPortDirection,
 ) {
     if buffer.lines.is_empty() {
@@ -51,10 +57,10 @@ pub fn update_by_direction(
     match direction {
         ViewPortDirection::BottomOnCursor => {
             if let Some(cursor) = &cursor {
-                if cursor.vertical_index < viewport.height {
+                if cursor.vertical_index < usize::from(viewport.height) {
                     viewport.vertical_index = 0;
                 } else {
-                    let index = cursor.vertical_index - viewport.height + 1;
+                    let index = cursor.vertical_index - usize::from(viewport.height) + 1;
                     viewport.vertical_index = index;
                 }
             }
@@ -62,47 +68,47 @@ pub fn update_by_direction(
         ViewPortDirection::CenterOnCursor => {
             if let Some(cursor) = &cursor {
                 let index_offset = viewport.height / 2;
-                if cursor.vertical_index < index_offset {
+                if cursor.vertical_index < usize::from(index_offset) {
                     viewport.vertical_index = 0;
                 } else {
-                    viewport.vertical_index = cursor.vertical_index - index_offset;
+                    viewport.vertical_index = cursor.vertical_index - usize::from(index_offset);
                 }
             }
         }
         ViewPortDirection::HalfPageDown => {
             let index_offset = viewport.height / 2;
-            let viewport_end_index = viewport.vertical_index + (viewport.height - 1);
-            let viewport_end_after_move_index = viewport_end_index + index_offset;
+            let viewport_end_index = viewport.vertical_index + usize::from(viewport.height - 1);
+            let viewport_end_after_move_index = viewport_end_index + usize::from(index_offset);
 
             if viewport_end_after_move_index < buffer.lines.len() {
-                viewport.vertical_index += index_offset;
-            } else if viewport.height > buffer.lines.len() {
+                viewport.vertical_index += usize::from(index_offset);
+            } else if usize::from(viewport.height) > buffer.lines.len() {
                 viewport.vertical_index = 0;
             } else {
-                viewport.vertical_index = buffer.lines.len() - viewport.height;
+                viewport.vertical_index = buffer.lines.len() - usize::from(viewport.height);
             }
 
-            if let Some(ref mut cursor) = cursor {
-                if cursor.vertical_index + index_offset >= buffer.lines.len() {
+            if let Some(cursor) = cursor {
+                if cursor.vertical_index + usize::from(index_offset) >= buffer.lines.len() {
                     cursor.vertical_index = buffer.lines.len() - 1;
                 } else {
-                    cursor.vertical_index += index_offset;
+                    cursor.vertical_index += usize::from(index_offset);
                 }
             }
         }
         ViewPortDirection::HalfPageUp => {
             let index_offset = viewport.height / 2;
-            if viewport.vertical_index < index_offset {
+            if viewport.vertical_index < usize::from(index_offset) {
                 viewport.vertical_index = 0;
             } else {
-                viewport.vertical_index -= index_offset;
+                viewport.vertical_index -= usize::from(index_offset);
             }
 
-            if let Some(ref mut cursor) = cursor {
-                if cursor.vertical_index < index_offset {
+            if let Some(cursor) = cursor {
+                if cursor.vertical_index < usize::from(index_offset) {
                     cursor.vertical_index = 0;
                 } else {
-                    cursor.vertical_index -= index_offset;
+                    cursor.vertical_index -= usize::from(index_offset);
                 }
             }
         }

@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use yeet_buffer::model::{BufferLine, Sign, SignIdentifier};
 
 use crate::model::{
     mark::{Marks, MARK_SIGN_ID},
     qfix::{QuickFix, QFIX_SIGN_ID},
-    Model,
+    Buffer,
 };
 
 pub fn set_sign_if_qfix(qfix: &QuickFix, bl: &mut BufferLine, path: &Path) {
@@ -36,37 +36,45 @@ pub fn set(bl: &mut BufferLine, sign_id: SignIdentifier) {
     }
 }
 
-pub fn set_sign_for_path(model: &mut Model, path: &Path, sign_id: SignIdentifier) {
-    let parent = match path.parent() {
-        Some(it) => it,
-        None => return,
-    };
+pub fn set_sign_for_paths(buffers: Vec<&mut Buffer>, paths: Vec<PathBuf>, sign_id: SignIdentifier) {
+    for buffer in buffers {
+        let buffer = match buffer {
+            Buffer::FileTree(it) => it,
+            _ => continue,
+        };
 
-    let target = model
-        .files
-        .get_mut_directories()
-        .into_iter()
-        .find_map(|(p, _, _, b)| if p == parent { Some(b) } else { None });
+        for path in &paths {
+            let parent = match path.parent() {
+                Some(it) => it,
+                None => return,
+            };
 
-    let buffer = match target {
-        Some(buffer) => buffer,
-        None => return,
-    };
+            let target = buffer
+                .get_mut_directories()
+                .into_iter()
+                .find_map(|(p, _, _, b)| if p == parent { Some(b) } else { None });
 
-    let file_name = match path.file_name() {
-        Some(it) => match it.to_str() {
-            Some(it) => it,
-            None => return,
-        },
-        None => return,
-    };
+            let buffer = match target {
+                Some(buffer) => buffer,
+                None => return,
+            };
 
-    if let Some(line) = buffer
-        .lines
-        .iter_mut()
-        .find(|bl| bl.content.to_stripped_string() == file_name)
-    {
-        set(line, sign_id);
+            let file_name = match path.file_name() {
+                Some(it) => match it.to_str() {
+                    Some(it) => it,
+                    None => return,
+                },
+                None => return,
+            };
+
+            if let Some(line) = buffer
+                .lines
+                .iter_mut()
+                .find(|bl| bl.content.to_stripped_string() == file_name)
+            {
+                set(line, sign_id);
+            }
+        }
     }
 }
 
@@ -88,46 +96,64 @@ fn generate_sign(sign_id: SignIdentifier) -> Option<Sign> {
     }
 }
 
-pub fn unset_sign_on_all_buffers(model: &mut Model, sign_id: SignIdentifier) {
-    model
-        .files
-        .get_mut_directories()
-        .into_iter()
-        .flat_map(|(_, _, _, b)| &mut b.lines)
-        .for_each(|l| unset(l, sign_id));
+pub fn unset_sign_on_all_buffers(buffers: Vec<&mut Buffer>, sign_id: SignIdentifier) {
+    for buffer in buffers {
+        let buffer = match buffer {
+            Buffer::FileTree(it) => it,
+            _ => continue,
+        };
+
+        buffer
+            .get_mut_directories()
+            .into_iter()
+            .flat_map(|(_, _, _, b)| &mut b.lines)
+            .for_each(|l| unset(l, sign_id));
+    }
 }
 
-pub fn unset_sign_for_path(model: &mut Model, path: &Path, sign_id: SignIdentifier) {
-    let parent = match path.parent() {
-        Some(it) => it,
-        None => return,
-    };
+pub fn unset_sign_for_paths(
+    buffers: Vec<&mut Buffer>,
+    paths: Vec<PathBuf>,
+    sign_id: SignIdentifier,
+) {
+    for buffer in buffers {
+        let buffer = match buffer {
+            Buffer::FileTree(it) => it,
+            _ => continue,
+        };
 
-    let target = model
-        .files
-        .get_mut_directories()
-        .into_iter()
-        .find_map(|(p, _, _, b)| if p == parent { Some(b) } else { None });
+        for path in &paths {
+            let parent = match path.parent() {
+                Some(it) => it,
+                None => return,
+            };
 
-    let buffer = match target {
-        Some(buffer) => buffer,
-        None => return,
-    };
+            let target = buffer
+                .get_mut_directories()
+                .into_iter()
+                .find_map(|(p, _, _, b)| if p == parent { Some(b) } else { None });
 
-    let file_name = match path.file_name() {
-        Some(it) => match it.to_str() {
-            Some(it) => it,
-            None => return,
-        },
-        None => return,
-    };
+            let buffer = match target {
+                Some(buffer) => buffer,
+                None => return,
+            };
 
-    if let Some(line) = buffer
-        .lines
-        .iter_mut()
-        .find(|bl| bl.content.to_stripped_string() == file_name)
-    {
-        unset(line, sign_id);
+            let file_name = match path.file_name() {
+                Some(it) => match it.to_str() {
+                    Some(it) => it,
+                    None => return,
+                },
+                None => return,
+            };
+
+            if let Some(line) = buffer
+                .lines
+                .iter_mut()
+                .find(|bl| bl.content.to_stripped_string() == file_name)
+            {
+                unset(line, sign_id);
+            }
+        }
     }
 }
 

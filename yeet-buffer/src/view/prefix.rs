@@ -18,7 +18,7 @@ pub fn get_custom_prefix(line: &BufferLine) -> Ansi {
     }
 }
 
-pub fn get_line_number(vp: &ViewPort, index: usize, cursor: &Option<Cursor>) -> Ansi {
+pub fn get_line_number(vp: &ViewPort, index: usize, cursor: Option<&Cursor>) -> Ansi {
     if vp.line_number == LineNumber::None {
         return Ansi::new("");
     }

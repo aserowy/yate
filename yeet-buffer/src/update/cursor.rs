@@ -2,16 +2,16 @@ use std::cmp::Ordering;
 
 use crate::{
     message::{CursorDirection, Search},
-    model::{Buffer, BufferLine, BufferResult, Cursor, CursorPosition, Mode},
+    model::{BufferLine, BufferResult, Cursor, CursorPosition, Mode, TextBuffer},
 };
 
 use super::{find, word};
 
 // TODO: refactor
-pub fn update_cursor_by_direction(
+pub fn update_by_direction(
     cursor: &mut Cursor,
     mode: &Mode,
-    buffer: &mut Buffer,
+    buffer: &mut TextBuffer,
     count: &usize,
     direction: &CursorDirection,
 ) -> Vec<BufferResult> {
@@ -222,7 +222,11 @@ pub fn update_cursor_by_direction(
     results
 }
 
-pub fn set_outbound_cursor_to_inbound_position(cursor: &mut Cursor, mode: &Mode, model: &Buffer) {
+pub fn set_to_inbound_position(
+    cursor: &mut Cursor,
+    mode: &Mode,
+    model: &TextBuffer,
+) {
     let position = if model.lines.is_empty() {
         get_position(mode, &0, &cursor.horizontal_index)
     } else {

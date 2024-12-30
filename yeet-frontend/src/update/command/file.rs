@@ -5,15 +5,19 @@ use yeet_keymap::message::KeymapMessage;
 use crate::{
     action::{self, Action},
     event::Message,
-    model::{mark::Marks, Model},
+    model::{mark::Marks, FileTreeBuffer, FileTreeBufferSectionBuffer},
     task::Task,
 };
 
-pub fn copy(model: &Model, target: &str) -> Vec<Action> {
+pub fn copy_selection(
+    marks: &Marks,
+    buffer: &FileTreeBufferSectionBuffer,
+    target: &str,
+) -> Vec<Action> {
     let mut actions = Vec::new();
-    if let Some(path) = &model.files.preview.resolve_path() {
+    if let Some(path) = &buffer.resolve_path() {
         tracing::info!("copying path: {:?}", path);
-        match get_target_file_path(&model.marks, target, path) {
+        match get_target_file_path(marks, target, path) {
             Ok(target) => actions.push(Action::Task(Task::CopyPath(path.to_path_buf(), target))),
             Err(err) => {
                 actions.push(Action::EmitMessages(vec![Message::Error(err)]));
@@ -23,9 +27,9 @@ pub fn copy(model: &Model, target: &str) -> Vec<Action> {
     actions
 }
 
-pub fn delete_selection(model: &Model) -> Vec<Action> {
+pub fn delete_selection(buffer: &FileTreeBufferSectionBuffer) -> Vec<Action> {
     let mut actions = Vec::new();
-    if let Some(path) = &model.files.preview.resolve_path() {
+    if let Some(path) = &buffer.resolve_path() {
         tracing::info!("deleting path: {:?}", path);
         actions.push(Action::Task(Task::DeletePath(path.to_path_buf())));
     } else {
@@ -35,11 +39,15 @@ pub fn delete_selection(model: &Model) -> Vec<Action> {
     actions
 }
 
-pub fn rename_selection(model: &Model, target: &str) -> Vec<Action> {
+pub fn rename_selection(
+    marks: &Marks,
+    buffer: &FileTreeBufferSectionBuffer,
+    target: &str,
+) -> Vec<Action> {
     let mut actions = Vec::new();
-    if let Some(path) = &model.files.preview.resolve_path() {
+    if let Some(path) = &buffer.resolve_path() {
         tracing::info!("renaming path: {:?}", path);
-        match get_target_file_path(&model.marks, target, path) {
+        match get_target_file_path(marks, target, path) {
             Ok(target) => {
                 actions.push(Action::Task(Task::RenamePath(path.to_path_buf(), target)));
             }
@@ -52,11 +60,11 @@ pub fn rename_selection(model: &Model, target: &str) -> Vec<Action> {
     actions
 }
 
-pub fn refresh(model: &Model) -> Vec<Action> {
-    let navigation = if let Some(path) = &model.files.preview.resolve_path() {
+pub fn refresh(buffer: &FileTreeBuffer) -> Vec<Action> {
+    let navigation = if let Some(path) = &buffer.preview.resolve_path() {
         KeymapMessage::NavigateToPathAsPreview(path.to_path_buf())
     } else {
-        KeymapMessage::NavigateToPath(model.files.current.path.clone())
+        KeymapMessage::NavigateToPath(buffer.current.path.clone())
     };
 
     vec![action::emit_keymap(navigation)]

@@ -1,11 +1,11 @@
 use crate::{
     message::CursorDirection,
-    model::{Buffer, BufferLine, Cursor, CursorPosition},
+    model::{BufferLine, Cursor, CursorPosition, TextBuffer},
 };
 
 use super::cursor;
 
-pub fn char(cursor: &mut Cursor, direction: &CursorDirection, model: &Buffer) {
+pub fn char(cursor: &mut Cursor, direction: &CursorDirection, model: &TextBuffer) {
     match direction {
         CursorDirection::FindBackward(find) => {
             if let Some(found) = find_char_backward(find, &model.lines, cursor) {

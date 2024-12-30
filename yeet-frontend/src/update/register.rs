@@ -19,7 +19,7 @@ pub fn get_register(register: &Register, register_id: &char) -> Option<String> {
     }
 }
 
-pub fn replay_register(register: &mut Register, char: &char) -> Vec<Action> {
+pub fn replay(register: &mut Register, char: &char) -> Vec<Action> {
     if let Some(content) = get_register(register, char) {
         vec![action::emit_keymap(KeymapMessage::ExecuteKeySequence(
             content.to_string(),
@@ -29,7 +29,7 @@ pub fn replay_register(register: &mut Register, char: &char) -> Vec<Action> {
     }
 }
 
-pub fn replay_macro_register(register: &mut Register, char: &char) -> Vec<Action> {
+pub fn replay_macro(register: &mut Register, char: &char) -> Vec<Action> {
     if let Some(content) = get_register(register, char) {
         register.last_macro = Some(content.to_string());
         vec![action::emit_keymap(KeymapMessage::ExecuteKeySequence(
@@ -52,7 +52,7 @@ pub fn get_macro_register(register: &Register) -> Option<&RegisterScope> {
 }
 
 #[tracing::instrument(skip(mode, register))]
-pub fn start_register_scope(mode: &Mode, register: &mut Register, messages: &[KeymapMessage]) {
+pub fn start_scope(mode: &Mode, register: &mut Register, messages: &[KeymapMessage]) {
     if let Some(scope) = resolve_register_scope(mode, messages) {
         tracing::trace!("starting scope: {:?}", scope);
 
@@ -98,7 +98,7 @@ fn resolve_macro_register(messages: &[KeymapMessage]) -> Option<char> {
 }
 
 #[tracing::instrument(skip(mode, register))]
-pub fn finish_register_scope(
+pub fn finish_scope(
     mode: &Mode,
     register: &mut Register,
     key_sequence: &KeySequence,
